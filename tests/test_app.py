@@ -69,6 +69,7 @@ async def test_gone_after_removal(hass: HomeAssistant, hass_client_no_auth) -> N
 async def test_config_flow_once(hass: HomeAssistant) -> None:
     result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": config_entries.SOURCE_USER})
     assert result["type"] is FlowResultType.FORM
+    assert result["description_placeholders"]["url"].endswith("/mb_logbook_app/")
     result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
     assert result["type"] is FlowResultType.CREATE_ENTRY
     result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": config_entries.SOURCE_USER})
