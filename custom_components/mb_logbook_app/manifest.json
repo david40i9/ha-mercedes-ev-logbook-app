@@ -1,0 +1,15 @@
+{
+  "domain": "mb_logbook_app",
+  "name": "Mercedes EV Logbook web app",
+  "after_dependencies": ["mb_logbook"],
+  "codeowners": ["@david40i9"],
+  "config_flow": true,
+  "dependencies": ["http"],
+  "documentation": "https://github.com/david40i9/ha-mercedes-ev-logbook-app",
+  "integration_type": "service",
+  "iot_class": "local_push",
+  "issue_tracker": "https://github.com/david40i9/ha-mercedes-ev-logbook-app/issues",
+  "requirements": [],
+  "single_config_entry": true,
+  "version": "0.1.0"
+}

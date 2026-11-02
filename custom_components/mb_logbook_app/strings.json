@@ -1,0 +1,13 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Mercedes EV Logbook web app",
+        "description": "Serves the logbook as a phone web app at your Home Assistant address followed by {path}, for example https://example.ui.nabu.casa{path}. Open it in Safari on an iPhone (or Chrome on Android), sign in with your Home Assistant account and add it to the home screen. Editing trips needs a Home Assistant administrator."
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "The web app is already set up."
+    }
+  }
+}

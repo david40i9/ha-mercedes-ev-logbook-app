@@ -1,0 +1,10 @@
+# Lint for the integration and its tests (run in CI: `ruff check`).
+target-version = "py313"
+line-length = 120
+
+[lint]
+select = ["E", "F", "W", "B", "UP", "SIM", "ASYNC"]
+ignore = [
+    "E501",    # long SQL and f-strings read better unwrapped
+    "SIM114",  # separate branches that each say why they count as movement
+]
