@@ -1,0 +1,24 @@
+name: Release
+
+# Push a tag like v0.18.0 to publish a GitHub release (HACS installs releases).
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check the tag matches manifest.json
+        run: |
+          want="${GITHUB_REF_NAME#v}"
+          have=$(python3 -c "import json;print(json.load(open('custom_components/mb_logbook_app/manifest.json'))['version'])")
+          [ "$want" = "$have" ] || { echo "Tag $GITHUB_REF_NAME but manifest says $have"; exit 1; }
+      - uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true

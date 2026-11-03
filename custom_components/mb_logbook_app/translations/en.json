@@ -1,0 +1,13 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Mercedes EV Logbook web app",
+        "description": "Serves the logbook as a phone web app at {url}. Open that address in Safari on an iPhone (or Chrome on Android), sign in with your Home Assistant account and add it to the home screen. Use the address that works away from home. Editing trips needs a Home Assistant administrator."
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "The web app is already set up."
+    }
+  }
+}
