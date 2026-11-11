@@ -25,6 +25,11 @@ main integration to carry it.
 - UI copies the Android app: dark and silver theme, Home / Trips / Charge tabs,
   trip page with route map, type chips, split/merge/delete. Hold a trip row to
   set its type. Not done yet: Places, Map tab, naming places.
+- Look (0.2.0): it shares the Home Assistant card's trip type colours (`TYPE_COLOURS`,
+  `typeColour`: Business blue, Commute orange, Personal green, then other types in the
+  order HA lists them). Chart bars carry their figure on top (Dave asked for this; keep
+  it). Questions use `ask()` (a `<dialog>`), never the browser's `confirm`/`prompt`.
+  Pages show `skeleton()` blocks while loading.
 
 ## Testing
 

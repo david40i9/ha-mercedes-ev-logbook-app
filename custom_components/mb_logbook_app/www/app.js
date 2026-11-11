@@ -205,11 +205,16 @@ const esc = (s) =>
 /** Number formatting for one car: its distance unit and currency. */
 function makeFmt(car) {
   const miles = car?.unit === "mi";
+  const currency = (code, digits) =>
+    new Intl.NumberFormat(LOCALE, { style: "currency", currency: code, ...(digits == null ? {} : { maximumFractionDigits: digits }) });
   let money;
+  let moneyShort;
   try {
-    money = new Intl.NumberFormat(LOCALE, { style: "currency", currency: car?.currency || "GBP" });
+    money = currency(car?.currency || "GBP");
+    moneyShort = currency(car?.currency || "GBP", 0);
   } catch {
-    money = new Intl.NumberFormat(LOCALE, { style: "currency", currency: "GBP" });
+    money = currency("GBP");
+    moneyShort = currency("GBP", 0);
   }
   const f = {
     distUnit: miles ? "mi" : "km",
@@ -219,6 +224,7 @@ function makeFmt(car) {
     distU: (km, digits = 0) => `${f.dist(km, digits)} ${f.distUnit}`,
     eff: (km, kwh) => (km > 0 && kwh > 0 ? (miles ? km / KM_PER_MI / kwh : (kwh / km) * 100) : null),
     money: (v) => (v == null ? "–" : money.format(v)),
+    moneyShort: (v) => (v == null ? "–" : moneyShort.format(v)),
   };
   return f;
 }
@@ -283,6 +289,29 @@ function nearestLabel(lat, lon, marks, fmt) {
 const typeName = (t) => (t == null ? "All types" : t === UNTAGGED ? "No type" : t);
 const matches = (trip, type) => type == null || (type === UNTAGGED ? !trip.label : trip.label === type);
 
+// ---------------------------------------------------------------- trip type colours
+
+// The same colours as the logbook's card in Home Assistant (its dark steps): Business,
+// Commute and Personal are fixed, and other types take the next five in the order
+// Home Assistant lists them. Anything beyond that stays neutral.
+const TYPE_COLOURS = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#008300", "#9085e9", "#e66767"];
+const TYPE_SLOTS = { Business: 0, Commute: 1, Personal: 2 };
+
+function typeColour(label) {
+  if (!label || label === UNTAGGED) return null;
+  if (label in TYPE_SLOTS) return TYPE_COLOURS[TYPE_SLOTS[label]];
+  const i = S.labels.filter((l) => !(l in TYPE_SLOTS)).indexOf(label);
+  return i >= 0 && i < 5 ? TYPE_COLOURS[3 + i] : null;
+}
+
+/** style="--c:…" for a type's colour, or nothing for a neutral one. */
+function typeStyle(label) {
+  const c = typeColour(label);
+  return c ? ` style="--c:${c}"` : "";
+}
+
+const dot = (label) => `<i class="dot"${typeStyle(label)}></i>`;
+
 // ---------------------------------------------------------------- icons
 
 const ICONS = {
@@ -298,6 +327,16 @@ const ICONS = {
   home: "M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z",
   trips: "M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z",
   bolt: "M7 2v11h3v9l7-12h-4l4-8z",
+  car: "M5,11L6.5,6.5H17.5L19,11M17.5,16A1.5,1.5 0 0,1 16,14.5A1.5,1.5 0 0,1 17.5,13A1.5,1.5 0 0,1 19,14.5A1.5,1.5 0 0,1 17.5,16M6.5,16A1.5,1.5 0 0,1 5,14.5A1.5,1.5 0 0,1 6.5,13A1.5,1.5 0 0,1 8,14.5A1.5,1.5 0 0,1 6.5,16M18.92,6C18.72,5.42 18.16,5 17.5,5H6.5C5.84,5 5.28,5.42 5.08,6L3,12V20A1,1 0 0,0 4,21H5A1,1 0 0,0 6,20V19H18V20A1,1 0 0,0 19,21H20A1,1 0 0,0 21,20V12L18.92,6Z",
+  distance: "M6.5,8.11C5.61,8.11 4.89,7.39 4.89,6.5A1.61,1.61 0 0,1 6.5,4.89C7.39,4.89 8.11,5.61 8.11,6.5V6.5A1.61,1.61 0 0,1 6.5,8.11M6.5,2C4,2 2,4 2,6.5C2,9.87 6.5,14.86 6.5,14.86C6.5,14.86 11,9.87 11,6.5C11,4 9,2 6.5,2M17.5,8.11A1.61,1.61 0 0,1 15.89,6.5C15.89,5.61 16.61,4.89 17.5,4.89C18.39,4.89 19.11,5.61 19.11,6.5A1.61,1.61 0 0,1 17.5,8.11M17.5,2C15,2 13,4 13,6.5C13,9.87 17.5,14.86 17.5,14.86C17.5,14.86 22,9.87 22,6.5C22,4 20,2 17.5,2M17.5,16C16.23,16 15.1,16.8 14.68,18H9.32C8.77,16.44 7.05,15.62 5.5,16.17C3.93,16.72 3.11,18.44 3.66,20C4.22,21.56 5.93,22.38 7.5,21.83C8.35,21.53 9,20.85 9.32,20H14.69C15.24,21.56 16.96,22.38 18.5,21.83C20.08,21.28 20.9,19.56 20.35,18C19.92,16.8 18.78,16 17.5,16V16M17.5,20.5A1.5,1.5 0 0,1 16,19A1.5,1.5 0 0,1 17.5,17.5A1.5,1.5 0 0,1 19,19A1.5,1.5 0 0,1 17.5,20.5Z",
+  energy: "M11 15H6L13 1V9H18L11 23V15Z",
+  eff: "M17,8C8,10 5.9,16.17 3.82,21.34L5.71,22L6.66,19.7C7.14,19.87 7.64,20 8,20C19,20 22,3 22,3C21,5 14,5.25 9,6.25C4,7.25 2,11.5 2,13.5C2,15.5 3.75,17.25 3.75,17.25C7,8 17,8 17,8Z",
+  station: "M19.77,7.23L19.78,7.22L16.06,3.5L15,4.56L17.11,6.67C16.17,7.03 15.5,7.93 15.5,9A2.5,2.5 0 0,0 18,11.5C18.36,11.5 18.69,11.42 19,11.29V18.5A1,1 0 0,1 18,19.5A1,1 0 0,1 17,18.5V14A2,2 0 0,0 15,12H14V5A2,2 0 0,0 12,3H6A2,2 0 0,0 4,5V21H14V13.5H15.5V18.5A2.5,2.5 0 0,0 18,21A2.5,2.5 0 0,0 20.5,18.5V9C20.5,8.31 20.22,7.68 19.77,7.23M18,10A1,1 0 0,1 17,9A1,1 0 0,1 18,8A1,1 0 0,1 19,9A1,1 0 0,1 18,10M8,18V13.5H6L10,6V11H12L8,18Z",
+  cash: "M5,6H23V18H5V6M14,9A3,3 0 0,1 17,12A3,3 0 0,1 14,15A3,3 0 0,1 11,12A3,3 0 0,1 14,9M9,8A2,2 0 0,1 7,10V14A2,2 0 0,1 9,16H19A2,2 0 0,1 21,14V10A2,2 0 0,1 19,8H9M1,10H3V20H19V22H1V10Z",
+  drain: "M16.5 16.25L19.36 17.94L18.61 19.16L15 17V12H16.5V16.25M23 16C23 19.87 19.87 23 16 23C14.69 23 13.46 22.63 12.41 22H7.33C6.6 22 6 21.4 6 20.67V5.33C6 4.6 6.6 4 7.33 4H9V2H15V4H16.67C17.4 4 18 4.6 18 5.33V9.29C20.89 10.15 23 12.83 23 16M21 16C21 13.24 18.76 11 16 11S11 13.24 11 16 13.24 21 16 21 21 18.76 21 16Z",
+  range: "M16 20H8V6H16M16.67 4H15V2H9V4H7.33C6.6 4 6 4.6 6 5.33V20.67C6 21.4 6.6 22 7.33 22H16.67C17.41 22 18 21.41 18 20.67V5.33C18 4.6 17.4 4 16.67 4M15 16H9V19H15V16M15 7H9V10H15V7M15 11.5H9V14.5H15V11.5Z",
+  upright: "M5,17.59L15.59,7H9V5H19V15H17V8.41L6.41,19L5,17.59Z",
+  downright: "M5,6.41L6.41,5L17,15.59V9H19V19H9V17H15.59L5,6.41Z",
 };
 const icon = (name) => `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${ICONS[name]}"/></svg>`;
 
@@ -512,14 +551,14 @@ function setTripLabel(trip, label) {
   });
 }
 
-function fixTrip(trip, what) {
+async function fixTrip(trip, what) {
   const asks = {
-    split: ["mb_logbook/split_trip", "Split this trip? It's cut in two at its longest stop (20 minutes or more).", "Trip split in two"],
-    merge: ["mb_logbook/merge_trips", "Merge this trip with the car's next one?", "Merged with the next trip"],
-    delete: ["mb_logbook/delete_trip", "Delete this trip? This can't be undone.", "Trip deleted"],
+    split: ["mb_logbook/split_trip", "Split this trip?", "It's cut in two at its longest stop (20 minutes or more).", "Split", "Trip split in two"],
+    merge: ["mb_logbook/merge_trips", "Merge with the next trip?", "This trip and the car's next one become one trip.", "Merge", "Merged with the next trip"],
+    delete: ["mb_logbook/delete_trip", "Delete this trip?", "This can't be undone.", "Delete", "Trip deleted"],
   };
-  const [type, question, done] = asks[what];
-  if (!confirm(question)) return;
+  const [type, title, text, ok, done] = asks[what];
+  if (!(await ask({ title, text, ok, danger: what === "delete" }))) return;
   edit(type, { trip_id: trip.id }, async () => {
     toast(done);
     closeTrip();
@@ -614,7 +653,7 @@ function sheet(title, options) {
     ${options
       .map(
         (o, i) =>
-          `<button data-act="sheet" data-i="${i}" class="${o.danger ? "danger" : ""}"><span class="grow">${esc(o.text)}</span>${
+          `<button data-act="sheet" data-i="${i}" class="${o.danger ? "danger" : ""}">${o.type !== undefined ? dot(o.type) : ""}<span class="grow">${esc(o.text)}</span>${
             o.note != null ? `<span class="count">${esc(o.note)}</span>` : ""
           }</button>`,
       )
@@ -630,7 +669,9 @@ function closeSheet() {
 
 function typeSheet(trip) {
   const opts = S.labels.map((l) => ({
-    text: trip.label === l && !trip.label_auto ? `✓ ${l}` : l,
+    text: l,
+    type: l,
+    note: trip.label === l && !trip.label_auto ? "✓" : null,
     run: () => setTripLabel(trip, l),
   }));
   opts.push({ text: "Other…", run: () => askOtherType(trip) });
@@ -638,9 +679,41 @@ function typeSheet(trip) {
   sheet(`${trip.start_place || "Unnamed"} → ${trip.end_place || "Unnamed"}`, opts);
 }
 
-function askOtherType(trip) {
-  const text = (prompt("Trip type") || "").trim().slice(0, 30);
+async function askOtherType(trip) {
+  const text = await ask({ title: "Another trip type", text: "It's added to the list for every trip.", ok: "Set type", input: "Name" });
   if (text) setTripLabel(trip, text);
+}
+
+/**
+ * A question in the app's own style, in place of the browser's pop-ups. Resolves true or
+ * false, or with [input] the typed text (null when cancelled or left empty).
+ */
+function ask({ title, text = "", ok = "OK", danger = false, input = null }) {
+  return new Promise((resolve) => {
+    const d = document.createElement("dialog");
+    d.className = "ask";
+    d.innerHTML = `<form method="dialog">
+      <h2>${esc(title)}</h2>
+      ${text ? `<p>${esc(text)}</p>` : ""}
+      ${input ? `<input type="text" maxlength="30" placeholder="${esc(input)}" aria-label="${esc(input)}" autocapitalize="words" enterkeyhint="done">` : ""}
+      <div class="buttons">
+        <button class="btn" value="no" type="submit" formnovalidate>Cancel</button>
+        <button class="btn ${danger ? "danger solid" : "primary"}" value="yes" type="submit">${esc(ok)}</button>
+      </div>
+    </form>`;
+    document.body.append(d);
+    const field = d.querySelector("input");
+    d.addEventListener("close", () => {
+      const yes = d.returnValue === "yes";
+      const typed = field ? field.value.trim().slice(0, 30) : "";
+      d.remove();
+      resolve(input ? (yes && typed ? typed : null) : yes);
+    });
+    // A tap on the dimmed page behind the box cancels, as on the sheets.
+    d.addEventListener("click", (ev) => ev.target === d && d.close("no"));
+    d.showModal();
+    if (field) field.focus();
+  });
 }
 
 function filterSheet() {
@@ -652,6 +725,7 @@ function filterSheet() {
     "Show",
     options.map((o) => ({
       text: typeName(o),
+      type: o,
       note: String(o == null ? all.length : all.filter((t) => matches(t, o)).length),
       run: () => {
         S.type = o;
@@ -791,16 +865,26 @@ function message(text, retry = false) {
   return `<div class="message">${esc(text)}${retry ? `<p><button class="btn" data-act="refresh">Try again</button></p>` : ""}</div>`;
 }
 
-/** Spinner, error with a retry, or [view] of the value. */
+/** Grey blocks in the shape of the page while it loads, so nothing jumps when it arrives. */
+function skeleton() {
+  return `<div class="skeleton" aria-busy="true" aria-label="Loading">
+    <div class="sk line"></div>
+    <div class="tiles">${'<div class="sk tile"></div>'.repeat(4)}</div>
+    ${'<div class="sk row"></div>'.repeat(5)}
+  </div>`;
+}
+
+/** Placeholders, error with a retry, or [view] of the value. */
 function loaded(load, view) {
-  if (!load || load.loading) return spinner();
+  if (!load || load.loading) return skeleton();
   if (load.error) return message(load.error, true);
   return view(load.value);
 }
 
-function tile(k, v, note = null, reserve = true) {
-  return `<div class="tile"><div class="k">${esc(k)}</div><div class="v">${esc(v)}</div>${
-    note != null || reserve ? `<div class="n">${esc(note ?? "")}</div>` : ""
+/** A figure with its name. [note] is text, or { html } for a change with its arrow. */
+function tile(k, v, note = null, reserve = true, ic = null) {
+  return `<div class="tile"><div class="k">${ic ? icon(ic) : ""}<span class="one">${esc(k)}</span></div><div class="v">${esc(v)}</div>${
+    note != null || reserve ? `<div class="n">${note?.html ?? esc(note ?? "")}</div>` : ""
   }</div>`;
 }
 
@@ -820,23 +904,26 @@ function section(title, key, body) {
   </div>`;
 }
 
-/** One bar per month; tapping a bar shows that month. */
-function barChart(title, labels, values, colour, selected, format) {
+/**
+ * One bar per month with its figure on top; tapping a bar shows that month. [short] is the
+ * figure over a bar (it has to fit twelve across a phone) and [format] the one in the heading.
+ */
+function barChart(title, labels, values, selected, format, short = format) {
   const max = Math.max(...values, 0) || 1;
   const n = values.length || 1;
-  const bars = values
+  const cols = values
     .map((v, i) => {
-      const h = Math.max(0, (v / max) * 100);
-      return `<rect x="${i * 10 + 1.5}" y="${100 - h}" width="7" height="${h}" fill="${colour}" opacity="${selected == null || selected === i ? 1 : 0.35}"/>
-        <rect x="${i * 10}" y="0" width="10" height="100" fill="transparent" data-act="bar" data-arg="${n - 1 - i}"/>`;
+      const h = Math.max(v > 0 ? 2 : 0, Math.round((v / max) * 84));
+      return `<button class="col ${selected === i ? "on" : ""}" data-act="bar" data-arg="${n - 1 - i}" aria-label="${esc(`${labels[i]}: ${format(v)}`)}">
+        <span class="val">${v > 0 ? esc(short(v)) : ""}</span><span class="bar" style="height:${h}px"></span>
+        <span class="x">${esc(labels[i])}</span></button>`;
     })
     .join("");
   return `<div class="chart">
     <div class="title"><span class="grow one">${esc(title)}</span><span class="bold">${
       selected != null ? esc(`${labels[selected]}: ${format(values[selected])}`) : ""
     }</span></div>
-    <svg viewBox="0 0 ${n * 10} 100" preserveAspectRatio="none">${bars}</svg>
-    <div class="labels">${labels.map((l, i) => `<span class="${i === selected ? "on" : ""}">${esc(l)}</span>`).join("")}</div>
+    <div class="cols">${cols}</div>
   </div>`;
 }
 
@@ -848,10 +935,15 @@ function overview(stats) {
   const idx = months.length - 1 - back;
   const cur = months[idx];
   const prev = months[idx - 1];
-  const vs = (a, b, show) => {
+  // good: +1 when more is better, -1 when less is better, 0 when it's neither (trips, distance).
+  const vs = (a, b, show, good = 0) => {
     if (b == null || b === 0 || !prev) return null;
     const d = a - b;
-    return `${d > 0 ? "+" : d < 0 ? "−" : "±"}${show(Math.abs(d))} vs ${monthName(prev.month)}`;
+    const cls = !d || !good ? "" : Math.sign(d) === good ? "good" : "bad";
+    const arrow = d > 0 ? icon("upright") : d < 0 ? icon("downright") : "";
+    return {
+      html: `<span class="delta ${cls}">${arrow}${d > 0 ? "+" : d < 0 ? "−" : "±"}${esc(show(Math.abs(d)))}</span> vs ${esc(monthName(prev.month))}`,
+    };
   };
   const eff = (m) => f.eff(m.km_with_kwh || 0, m.kwh_used || 0);
   const drain = (m) => (m.idle_hours > 0 ? (m.idle_drop / m.idle_hours) * 24 : null);
@@ -859,14 +951,21 @@ function overview(stats) {
   const e = eff(cur);
   const pe = prev ? eff(prev) : null;
   const tiles = [
-    tile("Trips", String(cur.trips), vs(cur.trips, prev?.trips, (v) => v.toFixed(0))),
-    tile("Distance", f.distU(cur.distance_km || 0), vs(cur.distance_km || 0, prev?.distance_km, (v) => f.distU(v))),
-    tile("Energy used", kwh(cur.kwh_used || 0), vs(cur.kwh_used || 0, prev?.kwh_used, kwh)),
-    tile("Efficiency", e != null ? e.toFixed(2) : "–", e != null && pe != null ? vs(e, pe, (v) => v.toFixed(2)) : f.effUnit),
-    tile("Charged", kwh(cur.charged_kwh || 0), vs(cur.charged_kwh || 0, prev?.charged_kwh, kwh)),
-    tile("Charging cost", f.money(cur.cost || 0), vs(cur.cost || 0, prev?.cost, (v) => f.money(v))),
-    tile("Idle drain", drain(cur) != null ? `${drain(cur).toFixed(2)} %/day` : "–"),
-    tile("Range at 100%", cur.range100_km != null ? f.distU(cur.range100_km) : "–"),
+    tile("Trips", String(cur.trips), vs(cur.trips, prev?.trips, (v) => v.toFixed(0)), true, "car"),
+    tile("Distance", f.distU(cur.distance_km || 0), vs(cur.distance_km || 0, prev?.distance_km, (v) => f.distU(v)), true, "distance"),
+    tile("Energy used", kwh(cur.kwh_used || 0), vs(cur.kwh_used || 0, prev?.kwh_used, kwh), true, "energy"),
+    // mi/kWh: higher is better; kWh/100km: lower is better.
+    tile(
+      "Efficiency",
+      e != null ? e.toFixed(2) : "–",
+      e != null && pe != null ? vs(e, pe, (v) => v.toFixed(2), f.distUnit === "mi" ? 1 : -1) : f.effUnit,
+      true,
+      "eff",
+    ),
+    tile("Charged", kwh(cur.charged_kwh || 0), vs(cur.charged_kwh || 0, prev?.charged_kwh, kwh), true, "station"),
+    tile("Charging cost", f.money(cur.cost || 0), vs(cur.cost || 0, prev?.cost, (v) => f.money(v)), true, "cash"),
+    tile("Idle drain", drain(cur) != null ? `${drain(cur).toFixed(2)} %/day` : "–", null, true, "drain"),
+    tile("Range at 100%", cur.range100_km != null ? f.distU(cur.range100_km) : "–", null, true, "range"),
   ];
 
   let types;
@@ -877,10 +976,10 @@ function overview(stats) {
 
   const labels = months.map((m) => monthName(m.month));
   const charts = [
-    barChart(`Distance (${f.distUnit})`, labels, months.map((m) => f.distNum(m.distance_km || 0)), "#89B4FA", idx, (v) => v.toFixed(0)),
-    barChart("Energy charged (kWh)", labels, months.map((m) => m.charged_kwh || 0), "#A6E3A1", idx, (v) => v.toFixed(0)),
-    barChart("Charging cost", labels, months.map((m) => m.cost || 0), "#F9E2AF", idx, (v) => f.money(v)),
-    barChart(`Efficiency (${f.effUnit})`, labels, months.map((m) => eff(m) || 0), "#CBA6F7", idx, (v) => v.toFixed(2)),
+    barChart(`Distance (${f.distUnit})`, labels, months.map((m) => f.distNum(m.distance_km || 0)), idx, (v) => v.toFixed(0)),
+    barChart("Energy charged (kWh)", labels, months.map((m) => m.charged_kwh || 0), idx, (v) => v.toFixed(0)),
+    barChart("Charging cost", labels, months.map((m) => m.cost || 0), idx, (v) => f.money(v), (v) => f.moneyShort(v)),
+    barChart(`Efficiency (${f.effUnit})`, labels, months.map((m) => eff(m) || 0), idx, (v) => v.toFixed(2)),
   ];
 
   const places = (stats.top_places || [])
@@ -917,9 +1016,9 @@ function tripTypes(trips, f) {
   return `<div class="bars">${sorted
     .map(
       ([label, list]) => `<div class="bar" data-act="pick" data-arg="${esc(label ?? UNTAGGED)}">
-        <div class="row"><span class="grow one ${label === "Business" ? "bold" : ""}">${esc(label ?? "No type")}</span>
+        <div class="row">${dot(label)}<span class="grow one ${label === "Business" ? "bold" : ""}">${esc(label ?? "No type")}</span>
         <span class="dim">${list.length} trips ·</span><span class="bold">${esc(f.distU(km(list), 1))}</span></div>
-        <div class="meter"><div style="width:${((km(list) / total) * 100).toFixed(1)}%"></div></div>
+        <div class="meter"${typeStyle(label)}><div style="width:${((km(list) / total) * 100).toFixed(1)}%"></div></div>
       </div>`,
     )
     .join("")}</div><div class="dim small">Tap a type to list its trips.</div>`;
@@ -942,7 +1041,7 @@ function tripsView(all) {
   const sum = (list) => list.reduce((s, t) => s + (t.distance_km || 0), 0);
   return `${head}
     <div class="row">
-      <button class="chip filter" data-act="filter">${esc(typeName(S.type))}${icon("drop")}</button>
+      <button class="chip filter" data-act="filter">${S.type == null ? "" : dot(S.type)}${esc(typeName(S.type))}${icon("drop")}</button>
       <span class="dim small one grow">Hold a trip to set its type</span>
     </div>
     <div class="tiles">${tile(S.type == null ? "Trips" : `${typeName(S.type)} trips`, String(trips.length), null, false)}${tile(
@@ -968,7 +1067,7 @@ function tripRow(t, f) {
     </div>
     <div class="end">
       <span class="bold">${esc(f.distU(t.distance_km || 0, 1))}</span>
-      ${t.label ? `<span class="label ${t.label_auto ? "auto" : ""}">${esc(t.label)}</span>` : ""}
+      ${t.label ? `<span class="label ${t.label_auto ? "auto" : ""}"${typeStyle(t.label)}><i class="dot"></i>${esc(t.label)}</span>` : ""}
     </div>
   </div>`;
 }
@@ -1045,7 +1144,7 @@ function render() {
   }
   const cars = S.cars;
   let body;
-  if (!cars || cars.loading) body = spinner();
+  if (!cars || cars.loading) body = skeleton();
   else if (cars.error) body = message(`Couldn't load the logbook: ${cars.error}`, true);
   else if (!S.car) body = message("No cars in the logbook yet. Add one in Home Assistant under Settings, Devices & services.");
   else if (S.tab === "home") body = loaded(S.stats, overview);
@@ -1150,7 +1249,10 @@ function tripBody(t) {
   const f = fmt();
   const off = S.saving ? "disabled" : "";
   const chips = S.labels
-    .map((l) => `<button class="chip ${t.label === l && !t.label_auto ? "on" : ""}" data-act="label" data-arg="${esc(l)}" ${off}>${esc(l)}</button>`)
+    .map(
+      (l) =>
+        `<button class="chip type ${t.label === l && !t.label_auto ? "on" : ""}"${typeStyle(l)} data-act="label" data-arg="${esc(l)}" ${off}><i class="dot"></i>${esc(l)}</button>`,
+    )
     .join("");
   const figures = [
     tile("Distance", f.distU(t.distance_km || 0, 1)),
