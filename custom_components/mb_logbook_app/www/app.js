@@ -320,6 +320,7 @@ const ICONS = {
   down: "M16.59 8.59 12 13.17 7.41 8.59 6 10l6 6 6-6z",
   up: "M12 8l-6 6 1.41 1.41L12 10.83l4.59 4.58L18 14z",
   drop: "M7 10l5 5 5-5z",
+  check: "M21,7L9,19L3.5,13.5L4.91,12.09L9,16.17L19.59,5.59L21,7Z",
   back: "M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z",
   refresh:
     "M17.65 6.35A7.96 7.96 0 0 0 12 4a8 8 0 1 0 7.73 10h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4z",
@@ -357,6 +358,7 @@ const S = {
   back: 0, // trips and charge tabs: months back
   overviewBack: 0,
   type: null, // trip type filter
+  unsentOnly: false, // trips tab: only the trips not yet sent to expenses
   stats: null,
   yearTrips: null,
   trips: null,
@@ -526,12 +528,49 @@ async function edit(type, params, done) {
     toast(
       e.code === "unauthorized" || /unauthori[sz]ed/i.test(e.message)
         ? "Only a Home Assistant administrator can change the logbook."
-        : e.message,
+        : e.code === "unknown_command"
+          ? "Update the EV Logbook integration in Home Assistant first."
+          : e.message,
     );
   } finally {
     S.saving = false;
     render();
   }
+}
+
+const longDate = (ts) => date(ts).toLocaleDateString(LOCALE, { day: "numeric", month: "short", year: "numeric" });
+const sentNote = (trip) => (trip.expensed_ts ? `It was sent to expenses on ${longDate(trip.expensed_ts)}. ` : "");
+
+/** Tick trips as sent to expenses (Home Assistant dates it now), or take the tick off. */
+function setExpensed(trips, sent) {
+  if (!trips.length) return;
+  edit("mb_logbook/trips_expensed", { trip_ids: trips.map((t) => t.id), sent }, async () => {
+    toast(!sent ? "No longer marked as sent" : trips.length === 1 ? "Marked as sent to expenses" : `${trips.length} trips marked as sent to expenses`);
+    await reloadAfterEdit(S.openTrip?.id ?? null);
+  });
+}
+
+/** The chosen type's trips this month that haven't been sent, after a yes. */
+async function markShownSent() {
+  const todo = (S.trips?.value || []).filter((t) => matches(t, S.type) && !t.expensed_ts);
+  if (!todo.length) return;
+  const km = todo.reduce((s, t) => s + (t.distance_km || 0), 0);
+  const yes = await ask({
+    title: "Mark as sent to expenses?",
+    text: `${todo.length} ${typeName(S.type)} ${todo.length === 1 ? "trip" : "trips"} (${fmt().distU(km, 1)}) this month will be ticked as sent. You can take the tick off a trip again.`,
+    ok: "Mark as sent",
+  });
+  if (yes) setExpensed(todo, true);
+}
+
+/** Set a trip's type, asking first when the trip has been sent to expenses. */
+async function changeTripLabel(trip, label) {
+  if (
+    trip.expensed_ts &&
+    !(await ask({ title: "Change a trip that's been sent?", text: `${sentNote(trip)}Changing its type won't change what you claimed.`, ok: "Change it" }))
+  )
+    return;
+  setTripLabel(trip, label);
 }
 
 function setTripLabel(trip, label) {
@@ -558,7 +597,7 @@ async function fixTrip(trip, what) {
     delete: ["mb_logbook/delete_trip", "Delete this trip?", "This can't be undone.", "Delete", "Trip deleted"],
   };
   const [type, title, text, ok, done] = asks[what];
-  if (!(await ask({ title, text, ok, danger: what === "delete" }))) return;
+  if (!(await ask({ title, text: sentNote(trip) + text, ok, danger: what === "delete" }))) return;
   edit(type, { trip_id: trip.id }, async () => {
     toast(done);
     closeTrip();
@@ -672,16 +711,17 @@ function typeSheet(trip) {
     text: l,
     type: l,
     note: trip.label === l && !trip.label_auto ? "✓" : null,
-    run: () => setTripLabel(trip, l),
+    run: () => changeTripLabel(trip, l),
   }));
   opts.push({ text: "Other…", run: () => askOtherType(trip) });
-  if (trip.label && !trip.label_auto) opts.push({ text: "Clear type", run: () => setTripLabel(trip, null) });
+  if (trip.label && !trip.label_auto) opts.push({ text: "Clear type", run: () => changeTripLabel(trip, null) });
+  opts.push({ text: trip.expensed_ts ? "Not sent to expenses after all" : "Sent to expenses", run: () => setExpensed([trip], !trip.expensed_ts) });
   sheet(`${trip.start_place || "Unnamed"} → ${trip.end_place || "Unnamed"}`, opts);
 }
 
 async function askOtherType(trip) {
   const text = await ask({ title: "Another trip type", text: "It's added to the list for every trip.", ok: "Set type", input: "Name" });
-  if (text) setTripLabel(trip, text);
+  if (text) changeTripLabel(trip, text);
 }
 
 /**
@@ -782,10 +822,16 @@ const ACTIONS = {
     const t = S.openTrip;
     if (!t) return;
     const l = el.dataset.arg;
-    if (t.label !== l || t.label_auto) setTripLabel(t, l);
+    if (t.label !== l || t.label_auto) changeTripLabel(t, l);
   },
   "label-other": () => S.openTrip && askOtherType(S.openTrip),
-  "label-clear": () => S.openTrip && setTripLabel(S.openTrip, null),
+  "label-clear": () => S.openTrip && changeTripLabel(S.openTrip, null),
+  sent: () => S.openTrip && setExpensed([S.openTrip], !S.openTrip.expensed_ts),
+  unsent: () => {
+    S.unsentOnly = !S.unsentOnly;
+    render();
+  },
+  "mark-sent": () => markShownSent(),
   fix: (el) => S.openTrip && fixTrip(S.openTrip, el.dataset.arg),
   sheet: (el) => {
     const run = sheetActions[Number(el.dataset.i)];
@@ -972,7 +1018,17 @@ function overview(stats) {
   const yt = S.yearTrips;
   if (!yt || yt.loading) types = `<div class="dim">Loading…</div>`;
   else if (yt.error) types = `<div>Couldn't load the trips: ${esc(yt.error)}</div>`;
-  else types = tripTypes(yt.value.filter((t) => monthKey(t.start_ts) === cur.month), f);
+  else {
+    const month = yt.value.filter((t) => monthKey(t.start_ts) === cur.month);
+    types = tripTypes(month, f);
+    // Only once the ticks are in use, or every past month would look unclaimed.
+    const unsent = month.filter((t) => t.label === "Business" && !t.expensed_ts);
+    if (unsent.length && yt.value.some((t) => t.expensed_ts)) {
+      const km = unsent.reduce((s, t) => s + (t.distance_km || 0), 0);
+      types += `<div class="unsent" data-act="pick" data-arg="Business"><div class="dim small">Business not yet sent to expenses</div>
+        <div class="bold">${esc(f.distU(km, 1))} · ${unsent.length} ${unsent.length === 1 ? "trip" : "trips"}</div></div>`;
+    }
+  }
 
   const labels = months.map((m) => monthName(m.month));
   const charts = [
@@ -1031,7 +1087,11 @@ function tripsView(all) {
   const key = monthKeyOf(monthStart(S.back));
   const head = monthBar(key, "month", S.back, S.back < 59);
   if (!all.length) return head + message("No trips this month.");
-  const trips = all.filter((t) => matches(t, S.type));
+  const ofType = all.filter((t) => matches(t, S.type));
+  const unsent = ofType.filter((t) => !t.expensed_ts);
+  // Expenses are claimed a type at a time, so the tools only show once a type is picked.
+  const claimable = S.type != null && S.type !== UNTAGGED;
+  const trips = S.unsentOnly && claimable ? unsent : ofType;
   const days = new Map();
   for (const t of trips) {
     const d = day(t.start_ts);
@@ -1050,7 +1110,20 @@ function tripsView(all) {
       null,
       false,
     )}</div>
-    ${trips.length ? "" : `<div class="message">No ${esc(typeName(S.type))} trips this month.</div>`}
+    ${
+      claimable && ofType.length
+        ? `<div class="row claim">
+      <button class="chip ${S.unsentOnly ? "on" : ""}" data-act="unsent">Not yet sent (${unsent.length})</button>
+      <span class="grow"></span>
+      ${unsent.length ? `<button class="btn quiet" data-act="mark-sent" ${S.saving ? "disabled" : ""}>Mark as sent</button>` : ""}
+    </div>`
+        : ""
+    }
+    ${
+      trips.length
+        ? ""
+        : `<div class="message">${ofType.length ? `Every ${esc(typeName(S.type))} trip this month has been sent to expenses.` : `No ${esc(typeName(S.type))} trips this month.`}</div>`
+    }
     ${[...days.entries()]
       .map(
         ([d, list]) => `<div class="day"><span class="d">${esc(d)}</span><span class="km">${esc(f.distU(sum(list), 1))}</span></div>
@@ -1063,7 +1136,7 @@ function tripRow(t, f) {
   return `<div class="trip" data-act="trip" data-arg="${t.id}" data-hold="${t.id}">
     <div class="grow">
       <div class="one">${esc(place(t.start_place))} → ${esc(place(t.end_place))}</div>
-      <div class="dim small">${time(t.start_ts)}–${time(t.end_ts)}</div>
+      <div class="dim small">${time(t.start_ts)}–${time(t.end_ts)}${t.expensed_ts ? `<span class="sent">${icon("check")}sent</span>` : ""}</div>
     </div>
     <div class="end">
       <span class="bold">${esc(f.distU(t.distance_km || 0, 1))}</span>
@@ -1274,6 +1347,11 @@ function tripBody(t) {
     <div class="scrollrow">${chips}
       <button class="chip" data-act="label-other" ${off}>Other…</button>
       ${t.label && !t.label_auto ? `<button class="chip" data-act="label-clear" ${off}>Clear</button>` : ""}
+    </div>
+    <h3>Expenses</h3>
+    <div class="row">
+      <span class="grow ${t.expensed_ts ? "sent-on" : "dim"}">${t.expensed_ts ? `Sent on ${esc(longDate(t.expensed_ts))}` : "Not yet sent"}</span>
+      <button class="btn" data-act="sent" ${off}>${t.expensed_ts ? "Undo" : "Mark as sent"}</button>
     </div>
     <h3>Fix the trip</h3>
     <div class="scrollrow">

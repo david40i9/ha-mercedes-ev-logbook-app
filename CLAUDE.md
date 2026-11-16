@@ -31,6 +31,13 @@ main integration to carry it.
   it). Questions use `ask()` (a `<dialog>`), never the browser's `confirm`/`prompt`.
   Pages show `skeleton()` blocks while loading.
 
+- Sent to expenses (0.3.0, needs integration 0.35.0+): trips carry `expensed_ts`, and
+  `mb_logbook/trips_expensed` (`trip_ids`, `sent`) sets or clears it (`setExpensed`). The Trips
+  tab shows "Not yet sent" and "Mark as sent" only once a type is picked. Changing the type of a
+  sent trip asks first (`changeTripLabel`). Home's "Business not yet sent" line only appears once
+  some trip in the year has a tick. An older integration answers `unknown_command`, shown as
+  "Update the EV Logbook integration…".
+
 ## Testing
 
 `pip install -r requirements_test.txt`, then `ruff check .`, `node --check

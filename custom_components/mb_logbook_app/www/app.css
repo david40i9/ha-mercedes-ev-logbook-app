@@ -241,3 +241,11 @@ dialog.ask input {
 dialog.ask input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
 dialog.ask .buttons { display: flex; justify-content: flex-end; gap: 10px; }
 dialog.ask .btn { padding: 9px 18px; font-size: 15px; }
+
+/* Sent to expenses */
+.trip .sent { display: inline-flex; align-items: center; gap: 2px; margin-left: 10px; color: var(--good); }
+.trip .sent svg { width: 13px; height: 13px; fill: currentColor; }
+.sent-on { color: var(--good); }
+.row.claim { margin-top: 8px; }
+.btn.quiet { border-color: transparent; color: var(--accent); font-weight: 600; }
+.unsent { padding-top: 10px; }
