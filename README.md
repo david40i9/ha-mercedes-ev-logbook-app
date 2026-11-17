@@ -14,7 +14,8 @@ It's a separate, optional install. The logbook integration works the same withou
 - **Charge:** each charging session, coloured by where it was.
 
 Everything comes from Home Assistant over its websocket, using the logbook's own commands.
-The only other thing the page loads is OpenStreetMap map tiles for the route maps.
+The only other thing the page loads is OpenStreetMap map tiles for the route maps
+(see [External connections](#external-connections)).
 
 ## Install
 
@@ -39,6 +40,19 @@ or the login is removed from that user's Home Assistant profile (Security → Re
 
 Anyone with a Home Assistant login can see the logbook. Changing trips (their type, split, merge or
 delete) needs a Home Assistant **administrator**, the same as in the logbook's sidebar page.
+
+## External connections
+
+Neither the integration nor the page talks to Mercedes, and there are no analytics, fonts or
+scripts from anywhere else (the map library, Leaflet, is shipped inside the integration).
+
+| Connection | When | What is sent | Why |
+|---|---|---|---|
+| **Your Home Assistant** (the address the page was opened from) | Signing in, then whenever the app is open | Home Assistant's own login (`/auth/authorize`, `/auth/token`), then the logbook's `mb_logbook/*` websocket commands with the access token | All the logbook data lives in Home Assistant; the page only shows and edits it |
+| **OpenStreetMap's tile servers** (`tile.openstreetmap.org`) | When a trip's route map is on screen | Requests for the map squares in view, straight from the phone (which shows the area you are looking at, not your trips) | To draw the map behind a trip's route |
+
+The integration part of this add-on only serves the page's files from Home Assistant. It makes no
+outside connections of its own. Installing and updating downloads the files from GitHub through HACS.
 
 ## How it works
 
